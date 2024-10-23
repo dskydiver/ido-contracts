@@ -14,6 +14,9 @@ describe("LaunchFactory", function () {
     // Contracts are deployed using the first signer/account by default
     const [owner, otherAccount] = await hre.ethers.getSigners()
 
+    const StableTokenFactory = await hre.ethers.getContractFactory('StableToken')
+    const stableToken = await StableTokenFactory.deploy()
+    await stableToken.waitForDeployment()
     const TokenFactory = await hre.ethers.getContractFactory("Token")
     const tokenSingleton = await TokenFactory.deploy("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
     await tokenSingleton.waitForDeployment()
@@ -24,7 +27,7 @@ describe("LaunchFactory", function () {
     const launchFactory = await LaunchFactoryFactory.deploy(owner.address, await launchSingletone.getAddress())
     await launchFactory.waitForDeployment()
 
-    return { launchFactory, owner, otherAccount }
+    return { launchFactory, stableToken, owner, otherAccount }
   }
 
   describe("Deployment", function () {
@@ -35,7 +38,7 @@ describe("LaunchFactory", function () {
     })
 
     it("Should deploy token", async function () {
-      const { launchFactory, owner, otherAccount } = await loadFixture(deployLaunchFactoryFixture)
+      const { launchFactory, stableToken, owner, otherAccount } = await loadFixture(deployLaunchFactoryFixture)
 
       await (await launchFactory.connect(otherAccount).createLaunch({
         name: "IDO Token",
@@ -44,6 +47,7 @@ describe("LaunchFactory", function () {
         softCap: "700000000000000000000000000000000000",
         hardCap: "800000000000000000000000000000000000",
         purchaseLimitPerWallet: "100000000000000000000000000000000000",
+        stableToken: await stableToken.getAddress()
       })).wait()
 
       const launchs = await launchFactory.getLaunches(otherAccount.address)

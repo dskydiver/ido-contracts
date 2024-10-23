@@ -18,12 +18,13 @@ interface ILaunch {
         uint256 hardCap;
         uint256 price;
         uint256 purchaseLimitPerWallet;
+        address stableToken;
     }
 
     // contribution struct
     struct Contribution {
         address contributor;
-        uint256 ethAmount;
+        uint256 stableAmount;
         uint256 tokenAmount;
     }
 
@@ -43,9 +44,9 @@ interface ILaunch {
 
     function initialize(InitializeParams memory params_) external;
 
-    function contribute() external payable;
+    function contribute(uint256) external;
 
-    function addLiquidityAndInitialBuy() external payable;
+    function addLiquidityAndInitialBuy(uint256) external;
 
     function pause() external;
 
@@ -55,7 +56,7 @@ interface ILaunch {
 
     event Purchase(
         address indexed buyer,
-        uint256 ethAmount,
+        uint256 contributeAmount,
         uint256 tokenAmount
     );
 }

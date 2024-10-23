@@ -3,6 +3,7 @@ pragma solidity 0.8.27;
 
 // OpenZeppelin
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -30,7 +31,7 @@ contract Launch is
 
     uint256 public softCap; // 70% of supply (0.7B)
     uint256 public hardCap; // 80% of supply (0.8B)
-    uint256 public price; // token amount per wei
+    uint256 public price; // token amount per 1 contribute token (without decimal)
     uint256 public purchaseLimitPerWallet; // 10% of supply (will be initialized with custom value)
 
     PurchasePhase public purchasePhase;
@@ -38,6 +39,9 @@ contract Launch is
     // map of contributions
     mapping(address => Contribution) public contributions;
 
+    uint256 private totalContribution;
+
+    address public stableToken;
     address public token;
 
     constructor(address owner_, address singleton_) {
@@ -51,6 +55,7 @@ contract Launch is
         hardCap = params_.hardCap;
         price = params_.price;
         purchaseLimitPerWallet = params_.purchaseLimitPerWallet;
+        stableToken = params_.stableToken;
 
         // Initialize OwnableUpgradeable.
         __Ownable_init(INITIAL_OWNER);
@@ -67,14 +72,14 @@ contract Launch is
             address(this),
             params_.name,
             params_.symbol,
-            params_.hardCap
+            params_.hardCap,
+            params_.stableToken
         );
 
         purchasePhase = PurchasePhase.SOFT_PURCHASE;
     }
 
-    function contribute() external payable {
-        require(msg.value > 0, "Contribution amount must be greater than 0");
+    function contribute(uint256 contributeAmount_) external {
         require(
             purchasePhase != PurchasePhase.COMPLETED,
             "Purchase phase completed"
@@ -82,23 +87,26 @@ contract Launch is
         require(purchasePhase != PurchasePhase.PAUSED, "Purchase phase paused");
 
         Contribution storage contribution = contributions[msg.sender];
-        uint256 availableEthAmount = (hardCap - contribution.tokenAmount) /
-            price;
-        uint256 ethAmount = Math.min(availableEthAmount, msg.value);
+        uint256 availableContributeAmount = ((hardCap -
+            contribution.tokenAmount) *
+            10 ** IERC20Metadata(stableToken).decimals()) / price;
+        uint256 contributeAmount = Math.min(
+            availableContributeAmount,
+            contributeAmount_
+        );
 
         if (purchasePhase == PurchasePhase.SOFT_PURCHASE) {
             // check purchase limit
-            ethAmount = Math.min(
-                ethAmount,
-                purchaseLimitPerWallet / price - contribution.ethAmount
+            contributeAmount = Math.min(
+                contributeAmount,
+                (purchaseLimitPerWallet *
+                    10 ** IERC20Metadata(token).decimals()) /
+                    price -
+                    contribution.stableAmount
             );
         }
 
-        purchase(ethAmount, msg.sender);
-
-        if (msg.value > ethAmount) {
-            payable(msg.sender).transfer(msg.value - ethAmount);
-        }
+        purchase(contributeAmount, msg.sender);
 
         // check current purchase amount
         uint256 currentPurchasedTokenAmount = IToken(token).maxSupply() -
@@ -110,28 +118,35 @@ contract Launch is
         }
     }
 
-    function purchase(uint256 ethAmount, address buyer) internal {
+    function purchase(uint256 contributeAmount, address buyer) internal {
         Contribution storage contribution = contributions[buyer];
-        contribution.ethAmount = contribution.ethAmount + ethAmount;
+        contribution.stableAmount =
+            contribution.stableAmount +
+            contributeAmount;
         contribution.tokenAmount =
             contribution.tokenAmount +
-            (ethAmount * price);
+            ((contributeAmount * price) /
+                10 ** IERC20Metadata(token).decimals());
 
-        IToken(token).transferFrom(token, buyer, contribution.tokenAmount);
+        IERC20(token).safeTransferFrom(token, buyer, contribution.tokenAmount);
 
-        emit Purchase(buyer, ethAmount, contribution.tokenAmount);
+        IERC20(stableToken).safeTransferFrom(buyer, token, contributeAmount);
+
+        totalContribution += contributeAmount;
+
+        emit Purchase(buyer, contributeAmount, contribution.tokenAmount);
     }
 
     // anyone can call this function for optional initial purchase
-    function addLiquidityAndInitialBuy() external payable {
+    function addLiquidityAndInitialBuy(uint256 buyAmount) external {
         require(
             purchasePhase == PurchasePhase.COMPLETED,
             "Purchase phase not completed"
         );
-        IToken(token).addLiquidityAndInitialBuy{value: address(this).balance}(
-            address(this).balance - msg.value,
+        IToken(token).addLiquidityAndInitialBuy(
+            totalContribution,
             msg.sender,
-            msg.value
+            buyAmount
         );
     }
 

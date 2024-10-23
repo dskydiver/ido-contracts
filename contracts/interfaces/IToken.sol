@@ -20,12 +20,13 @@ interface IToken is IERC20, IERC20Metadata {
         address owner_,
         string memory name,
         string memory symbol,
-        uint256 purchaseCap_
+        uint256 purchaseCap_,
+        address stableToken_
     ) external;
 
     function addLiquidityAndInitialBuy(
-        uint256 ethAmount,
+        uint256 stableAmount,
         address buyer,
-        uint256 initialBuyEthAmount
-    ) external payable;
+        uint256 initialBuyStableAmount
+    ) external;
 }
