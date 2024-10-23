@@ -37,13 +37,13 @@ describe("LaunchFactory", function () {
       console.log("LaunchFactory deployed to:", await launchFactory.getAddress())
     })
 
-    it("Should deploy token", async function () {
+    it("Should deploy token and contribute", async function () {
       const { launchFactory, stableToken, owner, otherAccount } = await loadFixture(deployLaunchFactoryFixture)
 
       await (await launchFactory.connect(otherAccount).createLaunch({
         name: "IDO Token",
         symbol: "IDOT",
-        price: 100,
+        price: hre.ethers.parseEther('0.01'),
         softCap: "700000000000000000000000000000000000",
         hardCap: "800000000000000000000000000000000000",
         purchaseLimitPerWallet: "100000000000000000000000000000000000",
@@ -61,6 +61,10 @@ describe("LaunchFactory", function () {
 
       expect(await token.name()).to.equal("IDO Token")
       expect(await token.symbol()).to.equal("IDOT")
+
+      await (await stableToken.transfer(otherAccount.address, hre.ethers.parseEther('1'))).wait()
+      await (await stableToken.connect(otherAccount).approve(await launch.getAddress(), hre.ethers.parseEther('0.1'))).wait()
+      await (await launch.connect(otherAccount).contribute(hre.ethers.parseEther('0.1'))).wait()
     })
   })
 })
